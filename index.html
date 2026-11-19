@@ -234,6 +234,7 @@ table.budget input{width:110px;padding:6px 8px;border:1px solid var(--line);bord
     <button role="tab" data-tab="deudas" aria-selected="false">Deudas</button>
     <button role="tab" data-tab="fijos" aria-selected="false">Pagos fijos</button>
     <button role="tab" data-tab="presupuesto" aria-selected="false">Presupuesto</button>
+    <button role="tab" data-tab="notas" aria-selected="false">Notas</button>
     <button role="tab" data-tab="ajustes" aria-selected="false">Ajustes</button>
   </nav>
 
@@ -301,13 +302,13 @@ const DEBT_TYPES = ["Tarjeta de crédito","Préstamo personal","Crédito de auto
 /* ---------- estado ---------- */
 const S = {
   db:null, ready:false, readOnly:false,
-  movs:[], deudas:[], fijos:[], cfg:structuredClone(DEFAULT_CFG), cfgExists:false,
+  movs:[], deudas:[], fijos:[], notas:[], cfg:structuredClone(DEFAULT_CFG), cfgExists:false,
   mes: monthOf(todayStr()),
   tab: "resumen",
   filt:{tipo:"", quien:"", q:"", cuenta:""}
 };
 try{ const t = store.get("fh-tab"); if(t) S.tab=t; }catch(e){}
-const h = location.hash.replace("#",""); if(["resumen","movs","cuentas","deudas","fijos","presupuesto","ajustes"].includes(h)) S.tab=h;
+const h = location.hash.replace("#",""); if(["resumen","movs","cuentas","deudas","fijos","presupuesto","notas","ajustes"].includes(h)) S.tab=h;
 
 /* ---------- cálculos ---------- */
 const movsMes = ym => S.movs.filter(m=>monthOf(m.fecha)===ym);
@@ -360,8 +361,10 @@ function render(){
   $("#mlabel").textContent = monthLabel(S.mes);
   document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected", String(b.dataset.tab===S.tab)));
   const v = $("#view");
-  const views = {resumen:vResumen, movs:vMovs, cuentas:vCuentas, deudas:vDeudas, fijos:vFijos, presupuesto:vPresupuesto, ajustes:vAjustes};
+  const views = {resumen:vResumen, movs:vMovs, cuentas:vCuentas, deudas:vDeudas, fijos:vFijos, presupuesto:vPresupuesto, notas:vNotas, ajustes:vAjustes};
+  const keepNota=$("#nTexto")?.value;
   v.innerHTML = (S.readOnly?'<p class="notice warn">Tu cuenta no tiene permiso para guardar. Pide que agreguen tu correo a la lista de acceso.</p>':"") + views[S.tab]();
+  if(keepNota && $("#nTexto")) $("#nTexto").value=keepNota;
   bindView();
 }
 
@@ -476,7 +479,7 @@ function porPersona(){
 
 function vMovs(){
   const f=S.filt; const q=f.q.trim().toLowerCase();
-  let ms=movsMes(S.mes).filter(m=>(!f.tipo||m.tipo===f.tipo)&&(!f.quien||m.quien===f.quien)&&(!f.cuenta||m.cuenta===f.cuenta||m.cuentaDestino===f.cuenta)&&(!q||(m.desc+" "+m.categoria).toLowerCase().includes(q)));
+  let ms=movsMes(S.mes).filter(m=>(!f.tipo||m.tipo===f.tipo)&&(!f.quien||m.quien===f.quien)&&(!f.cuenta||m.cuenta===f.cuenta||m.cuentaDestino===f.cuenta)&&(!q||(m.desc+" "+m.categoria+" "+(m.nota||"")).toLowerCase().includes(q)));
   ms.sort((a,b)=>b.fecha.localeCompare(a.fecha)||(b.creado||"").localeCompare(a.creado||""));
   const tot=ms.reduce((s,m)=>s+(m.tipo==="ingreso"?m.monto:m.tipo==="traspaso"?0:-m.monto),0);
   let html=`<div class="filters">
@@ -494,7 +497,7 @@ function vMovs(){
     const cat = m.tipo==="abono" ? "Abono · "+(deuda?deuda.nombre:"deuda eliminada") : m.tipo==="traspaso" ? "Traspaso" : m.categoria;
     html+=`<div class="item click" data-edit="${m.id}" tabindex="0"><div><div class="t">${esc(m.desc||cat)}</div>
       <div class="d"><span class="pill ${m.tipo==="ingreso"?"good":"neutral"}">${esc(cat)}</span>${m.quien?`<span>${esc(m.quien)}</span>`:""}<span>${esc(cuentaTxt(m))}</span>${(m.comprobantes||[]).length?`<span class="pill neutral">${m.comprobantes.length} comprobante${m.comprobantes.length===1?"":"s"}</span>`:""}</div>
-      <div class="d"><span>${m.tipo==="ingreso"?"Se recibió":m.tipo==="traspaso"?"Se hizo":"Se pagó"}: ${fechaCorta(m.fecha)}</span><span>· Registrado: ${fechaHora(m.creado)}</span></div></div>
+      <div class="d"><span>${m.tipo==="ingreso"?"Se recibió":m.tipo==="traspaso"?"Se hizo":"Se pagó"}: ${fechaCorta(m.fecha)}</span><span>· Registrado: ${fechaHora(m.creado)}</span></div>${m.nota?`<div class="d" style="font-style:italic;white-space:pre-wrap;display:block">Nota: ${esc(m.nota)}</div>`:""}</div>
       <div class="m ${m.tipo==="ingreso"?"pos":"neg"}">${m.tipo==="ingreso"?"+":m.tipo==="traspaso"?"":"−"}${money(m.monto)}</div></div>`;
   }
   return html+`</div>`;
@@ -513,6 +516,24 @@ function vCuentas(){
       <div class="facts"><div><span>Entró en ${monthLabel(S.mes,true)}</span>${money0(fl.ent)}</div><div><span>Salió en ${monthLabel(S.mes,true)}</span>${money0(fl.sal)}</div></div>
       <div class="row-actions"><button class="btn" data-vercuenta="${c.id}">Ver movimientos</button>${S.readOnly?"":`<button class="btn" data-traspaso="${c.id}">Traspasar</button>`}</div></div>`; }
   return html+`</div>`;
+}
+
+function vNotas(){
+  const ns=[...S.notas].sort((a,b)=>(b.creado||"").localeCompare(a.creado||""));
+  const sel=`<select id="nQuien" style="padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)" aria-label="Quién escribe">${S.cfg.personas.map(p=>`<option${p===(store.get("fh-quien")||S.cfg.personas[0])?" selected":""}>${esc(p)}</option>`).join("")}</select>`;
+  return `<div style="display:flex;flex-direction:column;gap:18px;max-width:760px">
+   <div><h2>Notas y aclaraciones</h2><p class="muted small" style="margin:2px 0 0">Para explicar o aclarar situaciones: de dónde salió un dinero, un acuerdo, un pendiente. Las ven los dos.</p></div>
+   ${S.readOnly?"":`<div class="panel" style="display:flex;flex-direction:column;gap:10px"><div class="field"><label for="nTexto">Nueva nota</label><textarea id="nTexto" rows="4" placeholder="Ej. El efectivo de la casa viene de cobros de procesos migratorios y penales."></textarea></div><div class="addrow">${sel}<button class="btn primary" id="nAdd">Guardar nota</button></div></div>`}
+   ${ns.length?`<div class="list">${ns.map(n=>`<div class="item" style="align-items:start"><div style="min-width:0"><div style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(n.texto)}</div><div class="d" style="margin-top:4px"><span>${esc(n.quien||"")}</span><span>· ${fechaHora(n.creado)}</span>${n.editado?`<span>· editada ${fechaHora(n.editado)}</span>`:""}</div></div>${S.readOnly?"":`<div class="row-actions" style="justify-content:flex-end"><button class="btn" data-editnota="${esc(n.id)}" style="padding:4px 10px;font-size:.78rem">Editar</button><button class="btn danger" data-delnota="${esc(n.id)}" style="padding:4px 10px;font-size:.78rem">Eliminar</button></div>`}</div>`).join("")}</div>`
+     :`<div class="empty"><strong>Sin notas todavía</strong><span>Escriban aquí cualquier aclaración que quieran recordar.</span></div>`}
+  </div>`;
+}
+function openNota(n){
+  modal("Editar nota",`<form id="fn" novalidate><div class="field"><label for="enTexto">Nota</label><textarea id="enTexto" rows="6">${esc(n.texto)}</textarea></div><div class="actions"><div class="right"><button type="button" class="btn" id="nCancel">Cancelar</button><button type="submit" class="btn primary">Guardar</button></div></div></form>`,()=>{
+    $("#nCancel").onclick=closeModal;
+    $("#fn").onsubmit=async e=>{ e.preventDefault(); const t=$("#enTexto").value.trim(); if(!t) return toast("La nota está vacía");
+      if(await write(()=>S.db.doc("notas/"+n.id).set({texto:t,quien:n.quien||"",creado:n.creado||new Date().toISOString(),editado:new Date().toISOString()}))){ closeModal(); toast("Nota actualizada"); } };
+  });
 }
 
 function vDeudas(){
@@ -612,11 +633,15 @@ function bindView(){
   v.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{ const k=b.dataset.add; const inp=$("#add-"+k); const val=inp.value.trim(); if(!val) return; if(S.cfg[k].includes(val)) return toast("Esa categoría ya existe"); await saveCfg({...S.cfg,[k]:[...S.cfg[k],val]},"Categoría agregada"); });
   v.querySelectorAll("[data-rm]").forEach(b=>b.onclick=async()=>{ const [k,i]=b.dataset.rm.split(":"); const arr=S.cfg[k].filter((_,j)=>j!=i); await saveCfg({...S.cfg,[k]:arr},"Categoría quitada"); });
   v.querySelectorAll("[data-fondo]").forEach(b=>b.onclick=()=>{ const r=document.documentElement; r.dataset.fondo=b.dataset.fondo; if(b.dataset.fondo==="clasico") delete r.dataset.theme; else r.dataset.theme="light"; store.set("fh-fondo",b.dataset.fondo); render(); });
+  const nadd=$("#nAdd"); if(nadd) nadd.onclick=async()=>{ const t=$("#nTexto").value.trim(); if(!t) return toast("Escribe la nota primero"); const q=$("#nQuien").value; store.set("fh-quien",q); nadd.disabled=true;
+    if(await write(()=>S.db.collection("notas").doc().set({texto:t,quien:q,creado:new Date().toISOString()}))){ const ta=$("#nTexto"); if(ta) ta.value=""; toast("Nota guardada"); } const nb=$("#nAdd"); if(nb) nb.disabled=false; };
+  v.querySelectorAll("[data-editnota]").forEach(b=>b.onclick=()=>{ const n=S.notas.find(x=>x.id===b.dataset.editnota); if(n) openNota(n); });
+  v.querySelectorAll("[data-delnota]").forEach(b=>armDelete(b,async()=>{ if(await write(()=>S.db.doc("notas/"+b.dataset.delnota).delete())) toast("Nota eliminada"); }));
   const readCtas=()=>(S.cfg.cuentas||[]).map((c,i)=>({...c,nombre:($("#cn-"+i)?.value||"").trim()||c.nombre,saldoInicial:num($("#cs-"+i)?.value||0),catAuto:$("#cc-"+i)?.value||""}));
   const scta=$("#saveCtas"); if(scta) scta.onclick=()=>saveCfg({...S.cfg,cuentas:readCtas()},"Cuentas guardadas");
   const acta=$("#addCta"); if(acta) acta.onclick=()=>saveCfg({...S.cfg,cuentas:[...readCtas(),{id:"c"+Date.now().toString(36),nombre:"Cuenta nueva",saldoInicial:0,catAuto:""}]},"Cuenta agregada");
   v.querySelectorAll("[data-rmcta]").forEach(b=>armDelete(b,()=>{ const i=+b.dataset.rmcta; saveCfg({...S.cfg,cuentas:readCtas().filter((_,j)=>j!==i)},"Cuenta quitada"); }));
-  const cc=$("#copyCsv"); if(cc) cc.onclick=()=>{ const rows=[["fecha","registrado","tipo","categoria","descripcion","monto","quien","deuda","cuenta","cuenta_destino"]].concat([...S.movs].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(m=>[m.fecha,m.creado||"",m.tipo,m.tipo==="abono"?ABONO_CAT:m.categoria,m.desc,m.monto,m.quien,(S.deudas.find(d=>d.id===m.deudaId)||{}).nombre||"",cuentaNom(m.cuenta),cuentaNom(m.cuentaDestino)]));
+  const cc=$("#copyCsv"); if(cc) cc.onclick=()=>{ const rows=[["fecha","registrado","tipo","categoria","descripcion","monto","quien","deuda","cuenta","cuenta_destino","nota"]].concat([...S.movs].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(m=>[m.fecha,m.creado||"",m.tipo,m.tipo==="abono"?ABONO_CAT:m.categoria,m.desc,m.monto,m.quien,(S.deudas.find(d=>d.id===m.deudaId)||{}).nombre||"",cuentaNom(m.cuenta),cuentaNom(m.cuentaDestino),m.nota||""]));
     const csv=rows.map(r=>r.map(x=>{x=String(x??"");return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(",")).join("\n");
     const ta=$("#csvOut"); ta.value=csv; ta.hidden=false;
     navigator.clipboard?.writeText(csv).then(()=>toast("Copiado al portapapeles")).catch(()=>{ta.select();toast("Selecciona el texto y cópialo")}) ?? (ta.select(),toast("Selecciona el texto y cópialo")); };
@@ -681,6 +706,7 @@ function openMov(m,preset){
     <div class="field"><label for="mCuenta" id="lCuenta">De dónde salió el dinero</label><select id="mCuenta">${ctaOpts(d.cuenta)}</select></div>
     <div class="field" id="wrapDest"><label for="mDest">A qué cuenta entra</label><select id="mDest">${ctaOpts(d.cuentaDestino)}</select></div>
     <div class="field"><label for="mDesc">Descripción</label><input id="mDesc" value="${esc(d.desc||"")}" placeholder="Ej. Súper en Soriana, quincena, recibo CFE"></div>
+    <div class="field"><label for="mNota">Nota o aclaración (opcional)</label><textarea id="mNota" rows="2" placeholder="Ej. Se pagó con efectivo de un cobro de proceso penal">${esc(d.nota||"")}</textarea></div>
     <div class="two">
       <div class="field"><label for="mFecha">Fecha en que se hizo</label><input id="mFecha" type="date" value="${d.fecha}"></div>
       <div class="field"><label for="mQuien">Quién</label><select id="mQuien">${S.cfg.personas.map(p=>`<option${p===d.quien?" selected":""}>${esc(p)}</option>`).join("")}</select></div>
@@ -719,7 +745,7 @@ function openMov(m,preset){
       if(tipo==="abono" && !$("#mDeuda").value){ err.textContent="Agrega primero la deuda en la pestaña Deudas."; err.hidden=false; return; }
       if(tipo==="traspaso" && (!$("#mCuenta").value || !$("#mDest").value || $("#mCuenta").value===$("#mDest").value)){ err.textContent="Elige dos cuentas distintas para el traspaso."; err.hidden=false; return; }
       const fecha=$("#mFecha").value||todayStr();
-      const body={tipo,monto,fecha,desc:$("#mDesc").value.trim(),quien:$("#mQuien").value,
+      const body={tipo,monto,fecha,desc:$("#mDesc").value.trim(), nota:$("#mNota").value.trim(),quien:$("#mQuien").value,
         categoria: tipo==="abono"?ABONO_CAT:tipo==="traspaso"?"Traspaso":$("#mCat").value, cuenta:$("#mCuenta").value||null, cuentaDestino: tipo==="traspaso"?($("#mDest").value||null):null, deudaId: tipo==="abono"?$("#mDeuda").value:null,
         recurrenteId: d.recurrenteId||null, creado: d.creado||new Date().toISOString(), editado: m?new Date().toISOString():null};
       store.set("fh-quien",body.quien); if(body.cuenta && tipo!=="ingreso") store.set("fh-cta",body.cuenta);
@@ -863,10 +889,10 @@ getRedirectResult(auth).catch(()=>{});
 let unsubs=[];
 onAuthStateChanged(auth,user=>{
   unsubs.forEach(u=>u()); unsubs=[];
-  if(!user){ S.db=null; S.ready=false; S.movs=[]; S.deudas=[]; S.fijos=[]; logoutBtn.hidden=true; st.textContent="Sin sesión"; render(); showLogin("Entra con tu cuenta de Google para ver y registrar los gastos de la casa."); return; }
+  if(!user){ S.db=null; S.ready=false; S.movs=[]; S.deudas=[]; S.fijos=[]; S.notas=[]; logoutBtn.hidden=true; st.textContent="Sin sesión"; render(); showLogin("Entra con tu cuenta de Google para ver y registrar los gastos de la casa."); return; }
   login.hidden=true; logoutBtn.hidden=false; S.db=DB; S.readOnly=false;
   st.textContent="Cargando…";
-  const loaded={movs:false,deudas:false,fijos:false,cfg:false};
+  const loaded={movs:false,deudas:false,fijos:false,notas:false,cfg:false};
   const done=()=>{ if(Object.values(loaded).every(Boolean)) S.ready=true; st.textContent=(S.ready?(navigator.onLine?"En línea":"Sin internet · se sincroniza al volver")+" · "+user.email:"Cargando…"); render(); };
   const onErr=e=>{
     if(e && e.code==="permission-denied"){ showLogin("La cuenta "+user.email+" no tiene acceso a estas finanzas. Entra con la cuenta autorizada.",true); }
@@ -874,6 +900,7 @@ onAuthStateChanged(auth,user=>{
   };
   unsubs.push(DB.collection("movs").onSnapshot(s=>{ S.movs=s.docs.map(d=>{const x=d.data();return {id:d.id,...x,monto:+x.monto||0}}); loaded.movs=true; done(); },onErr));
   unsubs.push(DB.collection("deudas").onSnapshot(s=>{ S.deudas=s.docs.map(d=>({id:d.id,...d.data()})); loaded.deudas=true; done(); },onErr));
+  unsubs.push(DB.collection("notas").onSnapshot(s=>{ S.notas=s.docs.map(d=>({id:d.id,...d.data()})); loaded.notas=true; done(); },onErr));
   unsubs.push(DB.collection("fijos").onSnapshot(s=>{ S.fijos=s.docs.map(d=>({id:d.id,...d.data()})); loaded.fijos=true; done(); },onErr));
   unsubs.push(DB.doc("config/hogar").onSnapshot(s=>{ if(s.exists){ const x=s.data(); S.cfg={personas:x.personas?.length?[...x.personas]:[...DEFAULT_CFG.personas],catGasto:x.catGasto?.length?[...x.catGasto]:[...DEFAULT_CFG.catGasto],catIngreso:x.catIngreso?.length?[...x.catIngreso]:[...DEFAULT_CFG.catIngreso],presupuesto:{...(x.presupuesto||{})},cuentas:Array.isArray(x.cuentas)&&x.cuentas.length?x.cuentas.map(c=>({...c})):structuredClone(DEFAULT_CFG.cuentas)}; if(!Array.isArray(x.cuentas)){ for(const c of ["Procesos migratorios","Procesos penales"]) if(!S.cfg.catIngreso.includes(c)) S.cfg.catIngreso.splice(Math.max(0,S.cfg.catIngreso.length-1),0,c); } S.cfg.migraciones=Array.isArray(x.migraciones)?[...x.migraciones]:[]; if(!S.cfg.migraciones.includes("alojamiento")){ if(!S.cfg.catIngreso.includes("Alojamiento")) S.cfg.catIngreso.splice(Math.max(0,S.cfg.catIngreso.length-1),0,"Alojamiento"); if(!S.cfg.cuentas.some(c=>c.id==="alojamiento")) S.cfg.cuentas.push({id:"alojamiento",nombre:"Cuenta Alojamiento",saldoInicial:0,catAuto:"Alojamiento"}); S.cfg.migraciones.push("alojamiento"); } S.cfgExists=true; } loaded.cfg=true; done(); },onErr));
 });
