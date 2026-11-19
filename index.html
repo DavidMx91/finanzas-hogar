@@ -268,8 +268,9 @@ const store = { get(k){try{return localStorage.getItem(k)}catch(e){return null}}
 const DEFAULT_CFG = {
   personas:["Yo","Mi esposa"],
   catGasto:["Súper y despensa","Comida fuera","Gasolina y transporte","Renta o hipoteca","Luz, agua y gas","Internet y celular","Salud","Escuela y colegiaturas","Hijos","Ropa","Hogar y mantenimiento","Entretenimiento","Mascotas","Regalos","Otros gastos"],
-  catIngreso:["Sueldo","Negocio","Honorarios","Procesos migratorios","Procesos penales","Ventas","Otros ingresos"],
-  cuentas:[{id:"efectivo",nombre:"Efectivo en casa",saldoInicial:0,catAuto:""},{id:"banco",nombre:"Cuenta bancaria",saldoInicial:0,catAuto:""},{id:"migratorios",nombre:"Cuenta Procesos Migratorios",saldoInicial:0,catAuto:"Procesos migratorios"},{id:"penales",nombre:"Cuenta Procesos Penales",saldoInicial:0,catAuto:"Procesos penales"}],
+  catIngreso:["Sueldo","Negocio","Honorarios","Procesos migratorios","Procesos penales","Alojamiento","Ventas","Otros ingresos"],
+  cuentas:[{id:"efectivo",nombre:"Efectivo en casa",saldoInicial:0,catAuto:""},{id:"banco",nombre:"Cuenta bancaria",saldoInicial:0,catAuto:""},{id:"migratorios",nombre:"Cuenta Procesos Migratorios",saldoInicial:0,catAuto:"Procesos migratorios"},{id:"penales",nombre:"Cuenta Procesos Penales",saldoInicial:0,catAuto:"Procesos penales"},{id:"alojamiento",nombre:"Cuenta Alojamiento",saldoInicial:0,catAuto:"Alojamiento"}],
+  migraciones:["alojamiento"],
   presupuesto:{}
 };
 const ABONO_CAT = "Abonos a deudas";
@@ -751,7 +752,7 @@ async function write(fn){
   return failWrite(r.err);
 }
 async function saveCfg(next,msg){
-  const body={personas:next.personas,catGasto:next.catGasto,catIngreso:next.catIngreso,presupuesto:next.presupuesto||{},cuentas:next.cuentas||[]};
+  const body={personas:next.personas,catGasto:next.catGasto,catIngreso:next.catIngreso,presupuesto:next.presupuesto||{},cuentas:next.cuentas||[],migraciones:next.migraciones||[]};
   if(await write(()=>S.db.doc("config/hogar").set(body))){ toast(msg); }
 }
 
@@ -816,7 +817,7 @@ onAuthStateChanged(auth,user=>{
   unsubs.push(DB.collection("movs").onSnapshot(s=>{ S.movs=s.docs.map(d=>{const x=d.data();return {id:d.id,...x,monto:+x.monto||0}}); loaded.movs=true; done(); },onErr));
   unsubs.push(DB.collection("deudas").onSnapshot(s=>{ S.deudas=s.docs.map(d=>({id:d.id,...d.data()})); loaded.deudas=true; done(); },onErr));
   unsubs.push(DB.collection("fijos").onSnapshot(s=>{ S.fijos=s.docs.map(d=>({id:d.id,...d.data()})); loaded.fijos=true; done(); },onErr));
-  unsubs.push(DB.doc("config/hogar").onSnapshot(s=>{ if(s.exists){ const x=s.data(); S.cfg={personas:x.personas?.length?[...x.personas]:[...DEFAULT_CFG.personas],catGasto:x.catGasto?.length?[...x.catGasto]:[...DEFAULT_CFG.catGasto],catIngreso:x.catIngreso?.length?[...x.catIngreso]:[...DEFAULT_CFG.catIngreso],presupuesto:{...(x.presupuesto||{})},cuentas:Array.isArray(x.cuentas)&&x.cuentas.length?x.cuentas.map(c=>({...c})):structuredClone(DEFAULT_CFG.cuentas)}; if(!Array.isArray(x.cuentas)){ for(const c of ["Procesos migratorios","Procesos penales"]) if(!S.cfg.catIngreso.includes(c)) S.cfg.catIngreso.splice(Math.max(0,S.cfg.catIngreso.length-1),0,c); } S.cfgExists=true; } loaded.cfg=true; done(); },onErr));
+  unsubs.push(DB.doc("config/hogar").onSnapshot(s=>{ if(s.exists){ const x=s.data(); S.cfg={personas:x.personas?.length?[...x.personas]:[...DEFAULT_CFG.personas],catGasto:x.catGasto?.length?[...x.catGasto]:[...DEFAULT_CFG.catGasto],catIngreso:x.catIngreso?.length?[...x.catIngreso]:[...DEFAULT_CFG.catIngreso],presupuesto:{...(x.presupuesto||{})},cuentas:Array.isArray(x.cuentas)&&x.cuentas.length?x.cuentas.map(c=>({...c})):structuredClone(DEFAULT_CFG.cuentas)}; if(!Array.isArray(x.cuentas)){ for(const c of ["Procesos migratorios","Procesos penales"]) if(!S.cfg.catIngreso.includes(c)) S.cfg.catIngreso.splice(Math.max(0,S.cfg.catIngreso.length-1),0,c); } S.cfg.migraciones=Array.isArray(x.migraciones)?[...x.migraciones]:[]; if(!S.cfg.migraciones.includes("alojamiento")){ if(!S.cfg.catIngreso.includes("Alojamiento")) S.cfg.catIngreso.splice(Math.max(0,S.cfg.catIngreso.length-1),0,"Alojamiento"); if(!S.cfg.cuentas.some(c=>c.id==="alojamiento")) S.cfg.cuentas.push({id:"alojamiento",nombre:"Cuenta Alojamiento",saldoInicial:0,catAuto:"Alojamiento"}); S.cfg.migraciones.push("alojamiento"); } S.cfgExists=true; } loaded.cfg=true; done(); },onErr));
 });
 addEventListener("online",()=>render()); addEventListener("offline",()=>{ st.textContent="Sin internet · se sincroniza al volver"; });
 })();
