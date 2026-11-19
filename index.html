@@ -188,6 +188,14 @@ table.budget input{width:110px;padding:6px 8px;border:1px solid var(--line);bord
 .seg button{border:0;background:transparent;padding:8px 4px;border-radius:8px;font-weight:600;font-size:.88rem;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 @media (max-width:440px){.seg{grid-template-columns:repeat(2,1fr)}}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.thumb{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--soft)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.thumb button{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:1;padding:0}
+.thumb .load{font-size:.7rem;color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%;text-align:center}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.viewer img{max-width:100%;max-height:100%;border-radius:6px;background:#fff}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
 .sheet .actions{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:6px}
 .sheet .actions .right{display:flex;gap:8px;margin-left:auto}
 
@@ -251,7 +259,7 @@ const FIREBASE_CONFIG = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 (function(){
 "use strict";
@@ -482,7 +490,7 @@ function vMovs(){
     const deuda = m.deudaId ? S.deudas.find(d=>d.id===m.deudaId) : null;
     const cat = m.tipo==="abono" ? "Abono · "+(deuda?deuda.nombre:"deuda eliminada") : m.tipo==="traspaso" ? "Traspaso" : m.categoria;
     html+=`<div class="item click" data-edit="${m.id}" tabindex="0"><div><div class="t">${esc(m.desc||cat)}</div>
-      <div class="d"><span class="pill ${m.tipo==="ingreso"?"good":"neutral"}">${esc(cat)}</span>${m.quien?`<span>${esc(m.quien)}</span>`:""}<span>${esc(cuentaTxt(m))}</span></div>
+      <div class="d"><span class="pill ${m.tipo==="ingreso"?"good":"neutral"}">${esc(cat)}</span>${m.quien?`<span>${esc(m.quien)}</span>`:""}<span>${esc(cuentaTxt(m))}</span>${(m.comprobantes||[]).length?`<span class="pill neutral">${m.comprobantes.length} comprobante${m.comprobantes.length===1?"":"s"}</span>`:""}</div>
       <div class="d"><span>${m.tipo==="ingreso"?"Se recibió":m.tipo==="traspaso"?"Se hizo":"Se pagó"}: ${fechaCorta(m.fecha)}</span><span>· Registrado: ${fechaHora(m.creado)}</span></div></div>
       <div class="m ${m.tipo==="ingreso"?"pos":"neg"}">${m.tipo==="ingreso"?"+":m.tipo==="traspaso"?"":"−"}${money(m.monto)}</div></div>`;
   }
@@ -633,6 +641,19 @@ function modal(title,inner,onMount){
   onMount && onMount();
   const first=$("#modalRoot").querySelector("input.big, input, select"); first && first.focus();
 }
+function verImagen(src){ if(!src) return; const v=document.createElement("div"); v.className="viewer"; v.setAttribute("role","dialog"); v.setAttribute("aria-label","Comprobante, toca para cerrar"); const im=document.createElement("img"); im.src=src; im.alt="Comprobante"; v.appendChild(im); v.onclick=()=>v.remove(); document.body.appendChild(v); }
+async function comprimir(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+    for(const max of [1600,1250,950,700]){
+      const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)); const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+      const c=document.createElement("canvas"); c.width=w; c.height=h; const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+      for(const q of [0.72,0.6,0.48]){ const out=c.toDataURL("image/jpeg",q); if(out.length<650000) return out; }
+    }
+    throw new Error("muy grande");
+  } finally { URL.revokeObjectURL(url); }
+}
 function armDelete(btn,fn){ btn.onclick=()=>{ if(btn.classList.contains("armed")) return fn(); btn.classList.add("armed"); btn.textContent="¿Seguro? Eliminar"; setTimeout(()=>{btn.classList.remove("armed");btn.textContent="Eliminar"},4000); }; }
 
 function openMov(m,preset){
@@ -661,6 +682,10 @@ function openMov(m,preset){
       <div class="field"><label for="mFecha">Fecha en que se hizo</label><input id="mFecha" type="date" value="${d.fecha}"></div>
       <div class="field"><label for="mQuien">Quién</label><select id="mQuien">${S.cfg.personas.map(p=>`<option${p===d.quien?" selected":""}>${esc(p)}</option>`).join("")}</select></div>
     </div>
+    <div class="field"><label for="mFotoBtn">Comprobantes (tickets, vouchers, recibos)</label>
+      <div class="thumbs" id="thumbs"></div>
+      <div><button type="button" class="btn" id="mFotoBtn">+ Agregar foto</button><input type="file" id="mFoto" class="vh" accept="image/*" multiple tabindex="-1" aria-hidden="true"></div>
+    </div>
     <p class="notice bad" id="mErr" hidden></p>
     <div class="actions">${m?'<button type="button" class="btn danger" id="mDel">Eliminar</button>':""}<div class="right"><button type="button" class="btn" id="mCancel">Cancelar</button><button type="submit" class="btn primary" id="mSave">Guardar</button></div></div>
    </form>`,()=>{
@@ -668,9 +693,23 @@ function openMov(m,preset){
     const sync=()=>{ $("#wrapCat").hidden=tipo==="abono"||tipo==="traspaso"; $("#wrapDeuda").hidden=tipo!=="abono"; $("#wrapDest").hidden=tipo!=="traspaso"; $("#lCuenta").textContent=tipo==="ingreso"?"A qué cuenta entró":tipo==="traspaso"?"De qué cuenta sale":"De dónde salió el dinero"; document.querySelectorAll("[data-t]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.t===tipo))); };
     document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ const prev=tipo; tipo=b.dataset.t; if((prev==="ingreso")!==(tipo==="ingreso")) $("#mCat").innerHTML=catOpts(tipo); sync(); autoCta(); });
     sync();
+    const thumbsEl=$("#thumbs"), keep=[...(d.comprobantes||[])], nuevos=[], quitar=[], cache={};
+    const drawThumbs=()=>{
+      thumbsEl.innerHTML = keep.map(id=>`<div class="thumb">${cache[id]?`<img src="${esc(cache[id])}" data-ver="${esc(id)}" alt="Comprobante">`:`<span class="load">Cargando…</span>`}<button type="button" data-qk="${esc(id)}" aria-label="Quitar comprobante">×</button></div>`).join("")
+        + nuevos.map((n,i)=>`<div class="thumb"><img src="${n}" data-vern="${i}" alt="Comprobante nuevo"><button type="button" data-qn="${i}" aria-label="Quitar comprobante">×</button></div>`).join("")
+        || `<span class="muted small">Sin comprobantes. Puedes tomar una foto o elegirla de tu galería.</span>`;
+      thumbsEl.querySelectorAll("[data-ver]").forEach(i=>i.onclick=()=>verImagen(cache[i.dataset.ver]));
+      thumbsEl.querySelectorAll("[data-vern]").forEach(i=>i.onclick=()=>verImagen(nuevos[+i.dataset.vern]));
+      thumbsEl.querySelectorAll("[data-qk]").forEach(b=>b.onclick=()=>{ const id=b.dataset.qk; const k=keep.indexOf(id); if(k>=0) keep.splice(k,1); quitar.push(id); drawThumbs(); });
+      thumbsEl.querySelectorAll("[data-qn]").forEach(b=>b.onclick=()=>{ nuevos.splice(+b.dataset.qn,1); drawThumbs(); });
+    };
+    drawThumbs();
+    keep.forEach(id=>S.db.doc("comprobantes/"+id).get().then(sn=>{ cache[id]=sn.exists?sn.data().img:""; if(!sn.exists){ const k=keep.indexOf(id); if(k>=0) keep.splice(k,1); } drawThumbs(); }).catch(()=>{}));
+    $("#mFotoBtn").onclick=()=>$("#mFoto").click();
+    $("#mFoto").onchange=async e=>{ const files=[...e.target.files]; e.target.value=""; for(const f of files){ if(f.type && !f.type.startsWith("image/")){ toast("Solo se pueden agregar imágenes"); continue; } try{ nuevos.push(await comprimir(f)); drawThumbs(); }catch(err){ toast("No se pudo leer esa imagen"); } } };
     const autoCta=()=>{ if(tipo!=="ingreso") return; const ac=(S.cfg.cuentas||[]).find(c=>c.catAuto && c.catAuto===$("#mCat").value); if(ac) $("#mCuenta").value=ac.id; }; $("#mCat").addEventListener("change",autoCta); if(!m) autoCta();
     $("#mCancel").onclick=closeModal;
-    if(m) armDelete($("#mDel"),async()=>{ if(await write(()=>S.db.doc("movs/"+m.id).delete())){ closeModal(); toast("Movimiento eliminado"); } });
+    if(m) armDelete($("#mDel"),async()=>{ if(await write(()=>S.db.doc("movs/"+m.id).delete())){ (m.comprobantes||[]).forEach(id=>write(()=>S.db.doc("comprobantes/"+id).delete())); closeModal(); toast("Movimiento eliminado"); } });
     $("#fm").onsubmit=async e=>{ e.preventDefault();
       const monto=num($("#mMonto").value); const err=$("#mErr");
       if(monto<=0){ err.textContent="Escribe un monto mayor a cero."; err.hidden=false; return; }
@@ -683,7 +722,10 @@ function openMov(m,preset){
       store.set("fh-quien",body.quien); if(body.cuenta && tipo!=="ingreso") store.set("fh-cta",body.cuenta);
       $("#mSave").disabled=true;
       const ref = m ? S.db.doc("movs/"+m.id) : S.db.collection("movs").doc();
-      if(await write(()=>ref.set(body))){ closeModal(); toast(m?"Cambios guardados":(tipo==="ingreso"?"Ingreso registrado":tipo==="abono"?"Abono registrado":tipo==="traspaso"?"Traspaso registrado":"Gasto registrado")); if(!m && monthOf(fecha)!==S.mes){ S.mes=monthOf(fecha); render(); } }
+      const newIds=[];
+      for(const n of nuevos){ const rr=S.db.collection("comprobantes").doc(); if(!(await write(()=>rr.set({movId:ref.id,img:n,creado:new Date().toISOString()})))){ $("#mSave").disabled=false; return; } newIds.push(rr.id); }
+      body.comprobantes=[...keep,...newIds];
+      if(await write(()=>ref.set(body))){ for(const id of quitar) write(()=>S.db.doc("comprobantes/"+id).delete()); closeModal(); toast(m?"Cambios guardados":(tipo==="ingreso"?"Ingreso registrado":tipo==="abono"?"Abono registrado":tipo==="traspaso"?"Traspaso registrado":"Gasto registrado")); if(!m && monthOf(fecha)!==S.mes){ S.mes=monthOf(fecha); render(); } }
       else $("#mSave").disabled=false;
     };
   });
@@ -792,7 +834,7 @@ try{ fdb=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:pe
 catch(e){ fdb=initializeFirestore(app,{}); }
 
 /* adaptador: misma forma que usa el resto de la app */
-const wrapRef=r=>({ set:b=>setDoc(r,b), delete:()=>deleteDoc(r),
+const wrapRef=r=>({ id:r.id, get:()=>getDoc(r).then(s=>({exists:s.exists(),data:()=>s.data()})), set:b=>setDoc(r,b), delete:()=>deleteDoc(r),
   onSnapshot:(n,e)=>onSnapshot(r,s=>n({exists:s.exists(),data:()=>s.data()}),e) });
 const DB={
   doc:p=>wrapRef(doc(fdb,p)),
