@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
 <meta name="robots" content="noindex">
+<script>try{document.documentElement.dataset.fondo=localStorage.getItem("fh-fondo")||"pistache"}catch(e){document.documentElement.dataset.fondo="pistache"}</script>
 <title>Finanzas del Hogar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,6 +35,15 @@
   --inc:#2AA583; --exp:#D27C1E;
   --good:#5BC890; --warn:#E3AE55; --bad:#EE7466; --warn-bg:#2E2414; --bad-bg:#331B18; --good-bg:#15291F;
   color-scheme:dark}
+/* Fondos elegibles (se guardan por dispositivo) */
+:root[data-fondo="pistache"]{--bg:#E2EFCF;--surface:#F8FBF2;--soft:#D4E7BD;--line:#C2D8A6;--muted:#53634A}
+:root[data-fondo="azul"]{--bg:#B9C9DA;--bg-img:linear-gradient(165deg,#D5E0EB 0%,#AFC1D4 42%,#C9D6E3 68%,#A3B6CA 100%);--surface:#F4F7FA;--soft:#DCE5EE;--line:#B3C3D3;--muted:#3E4B59}
+@media (prefers-color-scheme: dark){
+  :root[data-fondo="pistache"]:not([data-theme="light"]){--bg:#152014;--surface:#1D2A1B;--soft:#263723;--line:#314630;--muted:#9FB396}
+  :root[data-fondo="azul"]:not([data-theme="light"]){--bg:#1A2533;--bg-img:linear-gradient(165deg,#26364D 0%,#1A2533 48%,#24354B 75%,#18222F 100%);--surface:#223044;--soft:#2B3B51;--line:#35485F;--muted:#A0B1C5}
+}
+:root[data-fondo="pistache"][data-theme="dark"]{--bg:#152014;--surface:#1D2A1B;--soft:#263723;--line:#314630;--muted:#9FB396}
+:root[data-fondo="azul"][data-theme="dark"]{--bg:#1A2533;--bg-img:linear-gradient(165deg,#26364D 0%,#1A2533 48%,#24354B 75%,#18222F 100%);--surface:#223044;--soft:#2B3B51;--line:#35485F;--muted:#A0B1C5}
 *{box-sizing:border-box}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0}
@@ -45,7 +55,7 @@ img{max-width:100%}
 .login .btn{padding:12px 20px;font-size:1rem}
 .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:.8rem;text-decoration:underline}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums}
+body{background:var(--bg-img,var(--bg));color:var(--ink);min-height:100vh;font-family:var(--f-body);font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums}
 .wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:20px 110px}
 h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
 h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em}
@@ -565,6 +575,8 @@ function vAjustes(){
      ${S.readOnly?"":`<div class="addrow"><button class="btn" id="addCta">+ Agregar cuenta</button><button class="btn primary" id="saveCtas">Guardar cuentas</button></div>`}</section>
    <section class="block"><h2>Categorías de gasto</h2>${chipList("catGasto")}</section>
    <section class="block"><h2>Categorías de ingreso</h2>${chipList("catIngreso")}</section>
+   <section class="block"><h2>Fondo</h2><p class="muted small" style="margin:0">Se guarda en este dispositivo.</p>
+     <div class="seg" style="grid-template-columns:repeat(3,1fr);max-width:440px">${[["pistache","Verde pistache"],["azul","Azul metálico"],["clasico","Original"]].map(([k,t])=>`<button type="button" data-fondo="${k}" aria-pressed="${(document.documentElement.dataset.fondo||"pistache")===k}">${t}</button>`).join("")}</div></section>
    <section class="block"><h2>Exportar</h2><p class="muted small" style="margin:0">Copia todos los movimientos en formato CSV para pegarlos en Excel o Google Sheets.</p>
      <div><button class="btn" id="copyCsv">Copiar movimientos (CSV)</button></div><textarea id="csvOut" hidden style="width:100%;height:120px;font-size:.8rem"></textarea></section>
   </div>`;
@@ -588,6 +600,7 @@ function bindView(){
   const spp=$("#savePeople"); if(spp) spp.onclick=async()=>{ const a=$("#p0").value.trim()||"Persona 1", b=$("#p1").value.trim()||"Persona 2"; await saveCfg({...S.cfg,personas:[a,b]},"Nombres guardados"); };
   v.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{ const k=b.dataset.add; const inp=$("#add-"+k); const val=inp.value.trim(); if(!val) return; if(S.cfg[k].includes(val)) return toast("Esa categoría ya existe"); await saveCfg({...S.cfg,[k]:[...S.cfg[k],val]},"Categoría agregada"); });
   v.querySelectorAll("[data-rm]").forEach(b=>b.onclick=async()=>{ const [k,i]=b.dataset.rm.split(":"); const arr=S.cfg[k].filter((_,j)=>j!=i); await saveCfg({...S.cfg,[k]:arr},"Categoría quitada"); });
+  v.querySelectorAll("[data-fondo]").forEach(b=>b.onclick=()=>{ document.documentElement.dataset.fondo=b.dataset.fondo; store.set("fh-fondo",b.dataset.fondo); render(); });
   const readCtas=()=>(S.cfg.cuentas||[]).map((c,i)=>({...c,nombre:($("#cn-"+i)?.value||"").trim()||c.nombre,saldoInicial:num($("#cs-"+i)?.value||0),catAuto:$("#cc-"+i)?.value||""}));
   const scta=$("#saveCtas"); if(scta) scta.onclick=()=>saveCfg({...S.cfg,cuentas:readCtas()},"Cuentas guardadas");
   const acta=$("#addCta"); if(acta) acta.onclick=()=>saveCfg({...S.cfg,cuentas:[...readCtas(),{id:"c"+Date.now().toString(36),nombre:"Cuenta nueva",saldoInicial:0,catAuto:""}]},"Cuenta agregada");
