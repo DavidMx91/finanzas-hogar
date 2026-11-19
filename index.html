@@ -386,6 +386,7 @@ function vResumen(){
   for(const [c,lim] of Object.entries(S.cfg.presupuesto||{})){ if(!lim) continue; const g=gpc[c]||0; if(g>lim) alerts.push(`<span class="pill bad">Excedido</span> ${esc(c)}: ${money0(g)} de ${money0(lim)}`); else if(g>=lim*.85) alerts.push(`<span class="pill warn">Casi al límite</span> ${esc(c)}: ${money0(g)} de ${money0(lim)}`); }
   const comp = compromisos(S.mes);
   const sinCta=movsMes(S.mes).filter(m=>!m.cuenta&&m.tipo!=="traspaso").length; if(sinCta) alerts.push(`<span class="pill warn">Sin cuenta</span> ${sinCta} movimiento${sinCta===1?"":"s"} de este mes sin cuenta asignada; no se descuenta${sinCta===1?"":"n"} de ninguna cuenta. Ábrelo${sinCta===1?"":"s"} en Movimientos y elige la cuenta.`);
+  for(const c of (S.cfg.cuentas||[])){ const sc=saldoCuenta(c.id); if(sc<0) alerts.push(`<span class="pill bad">En negativo</span> ${esc(c.nombre)}: ${money0(sc)}. ${c.saldoInicial?"Revisa los movimientos de esta cuenta.":"Falta escribir su saldo inicial en Ajustes → Cuentas."}`); }
   const venc = comp.filter(c=>c.vencido); if(venc.length) alerts.push(`<span class="pill bad">Vencido</span> ${venc.map(c=>esc(c.nombre)).join(", ")}`);
 
   html += `<div class="grid2">
