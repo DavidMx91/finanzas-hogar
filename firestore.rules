@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Solo estas dos cuentas de Google pueden ver y guardar datos.
+    // Cambia el segundo correo por el de tu esposa.
+    function permitido() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+             'salvadormartinezfelixdavid@gmail.com',
+             'iusmata29@gmail.com'
+           ];
+    }
+
+    match /{document=**} {
+      allow read, write: if permitido();
+    }
+  }
+}
