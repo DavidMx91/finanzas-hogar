@@ -371,11 +371,12 @@ function vResumen(){
   const deudasAct = S.deudas.filter(d=>deudaInfo(d).saldo>0).length;
   const diff = prev.egr>0 ? ((t.egr-prev.egr)/prev.egr*100) : null;
   const ahorro = t.ing>0 ? (t.bal/t.ing*100) : null;
+  const dispTotal=(S.cfg.cuentas||[]).reduce((s,c)=>s+saldoCuenta(c.id),0), ncta=(S.cfg.cuentas||[]).length;
 
   let html = `<div class="kpis">
     <div class="kpi"><div class="label">Ingresos</div><div class="v">${money0(t.ing)}</div><div class="s">${movsMes(S.mes).filter(m=>m.tipo==="ingreso").length} registros</div></div>
     <div class="kpi"><div class="label">Egresos</div><div class="v">${money0(t.egr)}</div><div class="s">${diff===null?"Sin mes anterior para comparar":(diff>=0?"▲ ":"▼ ")+Math.abs(diff).toFixed(0)+"% vs mes anterior"}</div></div>
-    <div class="kpi"><div class="label">Disponible</div><div class="v" style="color:${t.bal<0?"var(--bad)":"var(--ink)"}">${money0(t.bal)}</div><div class="s">${ahorro===null?"Registra ingresos para ver tu ahorro":(t.bal>=0?"Ahorran el "+ahorro.toFixed(0)+"% del ingreso":"Gastaron más de lo que entró")}</div></div>
+    <div class="kpi"><div class="label">Dinero disponible</div><div class="v" style="color:${dispTotal<0?"var(--bad)":"var(--ink)"}">${money0(dispTotal)}</div><div class="s">Suma de lo que hay hoy en tus ${ncta} cuentas · balance del mes ${t.bal<0?"−":"+"}${money0(Math.abs(t.bal))}</div></div>
     <div class="kpi"><div class="label">Deuda total</div><div class="v">${money0(deudaTotal)}</div><div class="s">${deudasAct} ${deudasAct===1?"deuda activa":"deudas activas"} · abonado este mes ${money0(t.abo)}</div></div>
   </div>`;
 
@@ -384,6 +385,7 @@ function vResumen(){
   const gpc=gastosPorCat(S.mes);
   for(const [c,lim] of Object.entries(S.cfg.presupuesto||{})){ if(!lim) continue; const g=gpc[c]||0; if(g>lim) alerts.push(`<span class="pill bad">Excedido</span> ${esc(c)}: ${money0(g)} de ${money0(lim)}`); else if(g>=lim*.85) alerts.push(`<span class="pill warn">Casi al límite</span> ${esc(c)}: ${money0(g)} de ${money0(lim)}`); }
   const comp = compromisos(S.mes);
+  const sinCta=movsMes(S.mes).filter(m=>!m.cuenta&&m.tipo!=="traspaso").length; if(sinCta) alerts.push(`<span class="pill warn">Sin cuenta</span> ${sinCta} movimiento${sinCta===1?"":"s"} de este mes sin cuenta asignada; no se descuenta${sinCta===1?"":"n"} de ninguna cuenta. Ábrelo${sinCta===1?"":"s"} en Movimientos y elige la cuenta.`);
   const venc = comp.filter(c=>c.vencido); if(venc.length) alerts.push(`<span class="pill bad">Vencido</span> ${venc.map(c=>esc(c.nombre)).join(", ")}`);
 
   html += `<div class="grid2">
