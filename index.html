@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
 <meta name="robots" content="noindex">
-<script>try{document.documentElement.dataset.fondo=localStorage.getItem("fh-fondo")||"pistache"}catch(e){document.documentElement.dataset.fondo="pistache"}</script>
+<script>(function(){var f="pistache";try{f=localStorage.getItem("fh-fondo")||"pistache"}catch(e){}var r=document.documentElement;r.dataset.fondo=f;if(f!=="clasico")r.dataset.theme="light";})()</script>
 <title>Finanzas del Hogar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -576,7 +576,7 @@ function vAjustes(){
    <section class="block"><h2>Categorías de gasto</h2>${chipList("catGasto")}</section>
    <section class="block"><h2>Categorías de ingreso</h2>${chipList("catIngreso")}</section>
    <section class="block"><h2>Fondo</h2><p class="muted small" style="margin:0">Se guarda en este dispositivo.</p>
-     <div class="seg" style="grid-template-columns:repeat(3,1fr);max-width:440px">${[["pistache","Verde pistache"],["azul","Azul metálico"],["clasico","Original"]].map(([k,t])=>`<button type="button" data-fondo="${k}" aria-pressed="${(document.documentElement.dataset.fondo||"pistache")===k}">${t}</button>`).join("")}</div></section>
+     <div class="seg" style="grid-template-columns:repeat(3,1fr);max-width:440px">${[["pistache","Verde pistache"],["azul","Azul metálico"],["clasico","Original (claro/oscuro)"]].map(([k,t])=>`<button type="button" data-fondo="${k}" aria-pressed="${(document.documentElement.dataset.fondo||"pistache")===k}">${t}</button>`).join("")}</div></section>
    <section class="block"><h2>Exportar</h2><p class="muted small" style="margin:0">Copia todos los movimientos en formato CSV para pegarlos en Excel o Google Sheets.</p>
      <div><button class="btn" id="copyCsv">Copiar movimientos (CSV)</button></div><textarea id="csvOut" hidden style="width:100%;height:120px;font-size:.8rem"></textarea></section>
   </div>`;
@@ -600,7 +600,7 @@ function bindView(){
   const spp=$("#savePeople"); if(spp) spp.onclick=async()=>{ const a=$("#p0").value.trim()||"Persona 1", b=$("#p1").value.trim()||"Persona 2"; await saveCfg({...S.cfg,personas:[a,b]},"Nombres guardados"); };
   v.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{ const k=b.dataset.add; const inp=$("#add-"+k); const val=inp.value.trim(); if(!val) return; if(S.cfg[k].includes(val)) return toast("Esa categoría ya existe"); await saveCfg({...S.cfg,[k]:[...S.cfg[k],val]},"Categoría agregada"); });
   v.querySelectorAll("[data-rm]").forEach(b=>b.onclick=async()=>{ const [k,i]=b.dataset.rm.split(":"); const arr=S.cfg[k].filter((_,j)=>j!=i); await saveCfg({...S.cfg,[k]:arr},"Categoría quitada"); });
-  v.querySelectorAll("[data-fondo]").forEach(b=>b.onclick=()=>{ document.documentElement.dataset.fondo=b.dataset.fondo; store.set("fh-fondo",b.dataset.fondo); render(); });
+  v.querySelectorAll("[data-fondo]").forEach(b=>b.onclick=()=>{ const r=document.documentElement; r.dataset.fondo=b.dataset.fondo; if(b.dataset.fondo==="clasico") delete r.dataset.theme; else r.dataset.theme="light"; store.set("fh-fondo",b.dataset.fondo); render(); });
   const readCtas=()=>(S.cfg.cuentas||[]).map((c,i)=>({...c,nombre:($("#cn-"+i)?.value||"").trim()||c.nombre,saldoInicial:num($("#cs-"+i)?.value||0),catAuto:$("#cc-"+i)?.value||""}));
   const scta=$("#saveCtas"); if(scta) scta.onclick=()=>saveCfg({...S.cfg,cuentas:readCtas()},"Cuentas guardadas");
   const acta=$("#addCta"); if(acta) acta.onclick=()=>saveCfg({...S.cfg,cuentas:[...readCtas(),{id:"c"+Date.now().toString(36),nombre:"Cuenta nueva",saldoInicial:0,catAuto:""}]},"Cuenta agregada");
