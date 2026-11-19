@@ -258,6 +258,8 @@ const addMonth = (ym,k) => { let [y,m]=ym.split("-").map(Number); m+=k; while(m>
 const monthLabel = (ym,short) => { const [y,m]=ym.split("-").map(Number); return new Date(y,m-1,1).toLocaleDateString("es-MX",short?{month:"short"}:{month:"long",year:"numeric"}); };
 const daysIn = ym => { const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); };
 const dayLabel = f => { const [y,m,d]=f.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}); };
+const fechaCorta = f => { if(!f) return "—"; const [y,m,d]=f.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"}); };
+const fechaHora = iso => { if(!iso) return "sin dato"; const d=new Date(iso); return isNaN(d)?"sin dato":d.toLocaleString("es-MX",{day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"}); };
 const num = v => { const n = parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(n)?Math.round(n*100)/100:0; };
 const store = { get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}} };
 
@@ -459,7 +461,8 @@ function vMovs(){
     const deuda = m.deudaId ? S.deudas.find(d=>d.id===m.deudaId) : null;
     const cat = m.tipo==="abono" ? "Abono · "+(deuda?deuda.nombre:"deuda eliminada") : m.categoria;
     html+=`<div class="item click" data-edit="${m.id}" tabindex="0"><div><div class="t">${esc(m.desc||cat)}</div>
-      <div class="d"><span class="pill ${m.tipo==="ingreso"?"good":"neutral"}">${esc(cat)}</span>${m.quien?`<span>${esc(m.quien)}</span>`:""}</div></div>
+      <div class="d"><span class="pill ${m.tipo==="ingreso"?"good":"neutral"}">${esc(cat)}</span>${m.quien?`<span>${esc(m.quien)}</span>`:""}</div>
+      <div class="d"><span>${m.tipo==="ingreso"?"Se recibió":"Se pagó"}: ${fechaCorta(m.fecha)}</span><span>· Registrado: ${fechaHora(m.creado)}</span></div></div>
       <div class="m ${m.tipo==="ingreso"?"pos":"neg"}">${m.tipo==="ingreso"?"+":"−"}${money(m.monto)}</div></div>`;
   }
   return html+`</div>`;
@@ -552,7 +555,7 @@ function bindView(){
   const spp=$("#savePeople"); if(spp) spp.onclick=async()=>{ const a=$("#p0").value.trim()||"Persona 1", b=$("#p1").value.trim()||"Persona 2"; await saveCfg({...S.cfg,personas:[a,b]},"Nombres guardados"); };
   v.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{ const k=b.dataset.add; const inp=$("#add-"+k); const val=inp.value.trim(); if(!val) return; if(S.cfg[k].includes(val)) return toast("Esa categoría ya existe"); await saveCfg({...S.cfg,[k]:[...S.cfg[k],val]},"Categoría agregada"); });
   v.querySelectorAll("[data-rm]").forEach(b=>b.onclick=async()=>{ const [k,i]=b.dataset.rm.split(":"); const arr=S.cfg[k].filter((_,j)=>j!=i); await saveCfg({...S.cfg,[k]:arr},"Categoría quitada"); });
-  const cc=$("#copyCsv"); if(cc) cc.onclick=()=>{ const rows=[["fecha","tipo","categoria","descripcion","monto","quien","deuda"]].concat([...S.movs].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(m=>[m.fecha,m.tipo,m.tipo==="abono"?ABONO_CAT:m.categoria,m.desc,m.monto,m.quien,(S.deudas.find(d=>d.id===m.deudaId)||{}).nombre||""]));
+  const cc=$("#copyCsv"); if(cc) cc.onclick=()=>{ const rows=[["fecha","registrado","tipo","categoria","descripcion","monto","quien","deuda"]].concat([...S.movs].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(m=>[m.fecha,m.creado||"",m.tipo,m.tipo==="abono"?ABONO_CAT:m.categoria,m.desc,m.monto,m.quien,(S.deudas.find(d=>d.id===m.deudaId)||{}).nombre||""]));
     const csv=rows.map(r=>r.map(x=>{x=String(x??"");return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(",")).join("\n");
     const ta=$("#csvOut"); ta.value=csv; ta.hidden=false;
     navigator.clipboard?.writeText(csv).then(()=>toast("Copiado al portapapeles")).catch(()=>{ta.select();toast("Selecciona el texto y cópialo")}) ?? (ta.select(),toast("Selecciona el texto y cópialo")); };
@@ -590,6 +593,7 @@ function openMov(m,preset){
   const catOpts=t=> (t==="ingreso"?S.cfg.catIngreso:S.cfg.catGasto).map(c=>`<option${c===d.categoria?" selected":""}>${esc(c)}</option>`).join("");
   modal(m?"Editar movimiento":"Registrar movimiento",`
    <form id="fm" novalidate>
+    ${m?`<p class="muted small" style="margin:0">Registrado el ${fechaHora(m.creado)}${m.editado?` · última edición ${fechaHora(m.editado)}`:""}</p>`:""}
     <div class="seg" role="group" aria-label="Tipo">
       <button type="button" data-t="gasto" aria-pressed="${d.tipo==="gasto"}">Gasto</button>
       <button type="button" data-t="ingreso" aria-pressed="${d.tipo==="ingreso"}">Ingreso</button>
@@ -600,7 +604,7 @@ function openMov(m,preset){
     <div class="field" id="wrapDeuda"><label for="mDeuda">¿A qué deuda?</label><select id="mDeuda">${deudasAct.length?deudasAct.map(x=>`<option value="${x.id}"${x.id===d.deudaId?" selected":""}>${esc(x.nombre)} · saldo ${money0(deudaInfo(x).saldo)}</option>`).join(""):'<option value="">Primero agrega una deuda en la pestaña Deudas</option>'}</select></div>
     <div class="field"><label for="mDesc">Descripción</label><input id="mDesc" value="${esc(d.desc||"")}" placeholder="Ej. Súper en Soriana, quincena, recibo CFE"></div>
     <div class="two">
-      <div class="field"><label for="mFecha">Fecha</label><input id="mFecha" type="date" value="${d.fecha}"></div>
+      <div class="field"><label for="mFecha">Fecha en que se hizo</label><input id="mFecha" type="date" value="${d.fecha}"></div>
       <div class="field"><label for="mQuien">Quién</label><select id="mQuien">${S.cfg.personas.map(p=>`<option${p===d.quien?" selected":""}>${esc(p)}</option>`).join("")}</select></div>
     </div>
     <p class="notice bad" id="mErr" hidden></p>
@@ -619,7 +623,7 @@ function openMov(m,preset){
       const fecha=$("#mFecha").value||todayStr();
       const body={tipo,monto,fecha,desc:$("#mDesc").value.trim(),quien:$("#mQuien").value,
         categoria: tipo==="abono"?ABONO_CAT:$("#mCat").value, deudaId: tipo==="abono"?$("#mDeuda").value:null,
-        recurrenteId: d.recurrenteId||null, creado: d.creado||new Date().toISOString()};
+        recurrenteId: d.recurrenteId||null, creado: d.creado||new Date().toISOString(), editado: m?new Date().toISOString():null};
       store.set("fh-quien",body.quien);
       $("#mSave").disabled=true;
       const ref = m ? S.db.doc("movs/"+m.id) : S.db.collection("movs").doc();
